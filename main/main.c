@@ -12,6 +12,7 @@ void app_main(void) {
   ESP_ERROR_CHECK(esp_event_loop_create_default());
 
   ESP_ERROR_CHECK(network_init());
+  ESP_ERROR_CHECK(coap_server_init());
   rpm_sensor_init();
 
   while (true) {
