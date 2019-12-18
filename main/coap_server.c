@@ -6,21 +6,47 @@
 
 static const char *TAG = "coap";
 
-static char response_buffer[64];
+static void coap_send_text(coap_resource_t *resource, coap_session_t *session,
+                           coap_pdu_t *request, coap_binary_t *token,
+                           coap_pdu_t *response, const char *msg) {
+  coap_add_data_blocked_response(resource, session, request, response, token,
+                                 COAP_MEDIATYPE_TEXT_PLAIN, 0, strlen(msg),
+                                 (const u_char *)msg);
+}
 
 static void get_req_handler(coap_context_t *ctx, coap_resource_t *resource,
                             coap_session_t *session, coap_pdu_t *request,
                             coap_binary_t *token, coap_string_t *query,
                             coap_pdu_t *response) {
-  int length = snprintf(response_buffer, sizeof(response_buffer), "hello");
+  static char buffer[1024];
 
-  coap_add_data_blocked_response(resource, session, request, response, token,
-                                 COAP_MEDIATYPE_TEXT_PLAIN, 0, length,
-                                 (const u_char *)response_buffer);
+  if (query) {
+    size_t length = 0;
+
+    if (strcmp((char*)query->s, "0") == 0) {
+      length = snprintf(buffer, sizeof(buffer), "hello");
+    }
+    if (strcmp((char*)query->s, "1") == 0) {
+      length = snprintf(buffer, sizeof(buffer), "hello");
+    }
+
+    if (length > 0) {
+      coap_add_data_blocked_response(resource, session, request, response,
+                                     token,
+                                     COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, 0,
+                                     length, (const u_char *)buffer);
+    } else {
+      coap_send_text(resource, session, request, token, response,
+                     "failed to assemble response.");
+    }
+    return;
+  }
+
+  coap_send_text(resource, session, request, token, response,
+                 "choose sensor with 0 or 1 query param.");
 }
 
 static void server_task(void *p) {
-  /* Prepare the CoAP server socket */
   coap_address_t serv_addr;
   coap_address_init(&serv_addr);
   serv_addr.addr.sin.sin_family = AF_INET;
@@ -40,13 +66,12 @@ static void server_task(void *p) {
   }
 
   coap_resource_t *resource =
-      coap_resource_init(coap_make_str_const(""), 0);
+      coap_resource_init(coap_make_str_const("period"), 0);
   if (!resource) {
     ESP_LOGE(TAG, "coap_resource_init() failed");
     return;
   }
   coap_register_handler(resource, COAP_REQUEST_GET, get_req_handler);
-  /* We possibly want to Observe the GETs */
   coap_resource_set_get_observable(resource, 1);
   coap_add_resource(ctx, resource);
 
@@ -58,11 +83,11 @@ static void server_task(void *p) {
       ESP_LOGE(TAG, "coap run_once() failed");
       break;
     } else if (result && (unsigned)result < wait_ms) {
-      /* decrement if there is a result wait time returned */
+      // decrement if there is a result wait time returned
       wait_ms -= result;
     }
     if (result) {
-      /* result must have been >= wait_ms, so reset wait_ms */
+      // result must have been >= wait_ms, so reset wait_ms
       wait_ms = COAP_RESOURCE_CHECK_TIME * 1000;
     }
   }
