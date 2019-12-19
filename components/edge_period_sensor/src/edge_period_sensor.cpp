@@ -7,12 +7,12 @@
 
 #include <map>
 
-static uint64_t ticks_at_edge = 0;
-
 const auto EDGE_TIMESTAMP_SAMPLES = 256;
-std::map<const gpio_num_t, RingbufHandle_t> sensors = {{GPIO_NUM_15, nullptr}};
+using edge_timestamp_t = uint64_t;
 
 namespace {
+
+std::map<const gpio_num_t, RingbufHandle_t> sensors = {{GPIO_NUM_15, nullptr}};
 
 void IRAM_ATTR gpio_isr(void* arg) {
   uint32_t gpio_intr_status = READ_PERI_REG(GPIO_STATUS_REG);
@@ -20,9 +20,10 @@ void IRAM_ATTR gpio_isr(void* arg) {
   SET_PERI_REG_MASK(GPIO_STATUS_W1TC_REG, gpio_intr_status);
   SET_PERI_REG_MASK(GPIO_STATUS1_W1TC_REG, gpio_intr_status_h);
 
-  for () {
-    if (gpio_intr_status & BIT(SENSOR_PINS[i])) {
-      timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &ticks_at_edge);
+  for (auto& sensor_item : sensors) {
+    auto& pin = sensor_item.first;
+    if (gpio_intr_status & BIT(pin)) {
+      //      timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &ticks_at_edge);
     }
   }
 }
@@ -33,13 +34,14 @@ namespace edge_period_sensor {
 
 esp_err_t init() {
   uint64_t pin_mask = 0;
+
   for (auto& sensor_item : sensors) {
     auto& pin = sensor_item.first;
     pin_mask |= BIT(pin);
 
     auto& ringbuf = sensor_item.second;
-    ringbuf = xRingbufferCreate(sizeof(uint64_t) * EDGE_TIMESTAMP_SAMPLES,
-                                RINGBUF_TYPE_NOSPLIT);
+    auto required_size = sizeof(edge_timestamp_t) * EDGE_TIMESTAMP_SAMPLES;
+    ringbuf = xRingbufferCreate(required_size, RINGBUF_TYPE_NOSPLIT);
     if (!ringbuf) {
       return ESP_FAIL;
     }
@@ -51,7 +53,7 @@ esp_err_t init() {
   io_cfg.pin_bit_mask = pin_mask;
   io_cfg.pull_down_en = GPIO_PULLDOWN_ENABLE;
   gpio_config(&io_cfg);
-  gpio_isr_register(gpio_isr, NULL, ESP_INTR_FLAG_IRAM, NULL);
+  gpio_isr_register(gpio_isr, nullptr, ESP_INTR_FLAG_IRAM, nullptr);
 
   timer_config_t tim_cfg;
   tim_cfg.divider = 2;

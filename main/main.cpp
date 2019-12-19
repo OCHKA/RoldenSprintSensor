@@ -12,9 +12,8 @@ void app_main(void) {
   ESP_ERROR_CHECK(esp_event_loop_create_default());
 
   //  ESP_ERROR_CHECK(network_init());
-  ESP_ERROR_CHECK(coap_server::init());
+//  ESP_ERROR_CHECK(coap_server::init());
   ESP_ERROR_CHECK(edge_period_sensor::init());
-  //  rpm_sensor_init();
 
   while (true) {
     //    printf("GPIO: %llu\n", ticks_at_edge);
