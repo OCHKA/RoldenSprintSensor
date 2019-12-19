@@ -16,7 +16,9 @@ void app_main(void) {
   ESP_ERROR_CHECK(edge_period_sensor::init());
 
   while (true) {
-    //    printf("GPIO: %llu\n", ticks_at_edge);
+    while (auto event = edge_period_sensor::get_event()) {
+      printf("%llu: %i\n", event->timestamp, event->sensor);
+    }
     sleep(1);
   }
 }

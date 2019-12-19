@@ -7,10 +7,9 @@
 
 #include <map>
 
-const auto EDGE_TIMESTAMP_SAMPLES = 256;
-using edge_timestamp_t = uint64_t;
+namespace edge_period_sensor {
 
-namespace {
+const auto EDGE_TIMESTAMP_SAMPLES = 256;
 
 std::map<const gpio_num_t, RingbufHandle_t> sensors = {{GPIO_NUM_15, nullptr}};
 
@@ -20,26 +19,27 @@ void IRAM_ATTR gpio_isr(void* arg) {
   SET_PERI_REG_MASK(GPIO_STATUS_W1TC_REG, gpio_intr_status);
   SET_PERI_REG_MASK(GPIO_STATUS1_W1TC_REG, gpio_intr_status_h);
 
-  for (auto& sensor_item : sensors) {
-    auto& pin = sensor_item.first;
+  for (auto& sensor : sensors) {
+    auto& pin = sensor.first;
+    auto& ringbuf = sensor.second;
+
     if (gpio_intr_status & BIT(pin)) {
-      //      timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &ticks_at_edge);
+      edge_timestamp_t timestamp;
+      timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &timestamp);
+      xRingbufferSendFromISR(ringbuf, &timestamp, sizeof(timestamp), nullptr);
     }
   }
 }
 
-}  // namespace
-
-namespace edge_period_sensor {
-
 esp_err_t init() {
   uint64_t pin_mask = 0;
 
-  for (auto& sensor_item : sensors) {
-    auto& pin = sensor_item.first;
+  for (auto& sensor : sensors) {
+    auto& pin = sensor.first;
+    auto& ringbuf = sensor.second;
+
     pin_mask |= BIT(pin);
 
-    auto& ringbuf = sensor_item.second;
     auto required_size = sizeof(edge_timestamp_t) * EDGE_TIMESTAMP_SAMPLES;
     ringbuf = xRingbufferCreate(required_size, RINGBUF_TYPE_NOSPLIT);
     if (!ringbuf) {
@@ -64,6 +64,30 @@ esp_err_t init() {
   timer_init(TIMER_GROUP_0, TIMER_0, &tim_cfg);
 
   return ESP_OK;
+}
+
+std::optional<EdgeEvent> get_event() {
+  size_t index = 0;
+  for (auto& sensor : sensors) {
+    auto& ringbuf = sensor.second;
+
+    size_t item_size;
+    auto timestamp_ptr =
+        (edge_timestamp_t*)xRingbufferReceive(ringbuf, &item_size, 0);
+
+    if (timestamp_ptr) {
+      EdgeEvent event = {};
+      assert(item_size == sizeof(event.timestamp));
+
+      event.timestamp = *timestamp_ptr;
+      event.sensor = index;
+      return event;
+    }
+
+    index++;
+  }
+
+  return {};
 }
 
 }  // namespace edge_period_sensor
