@@ -5,9 +5,11 @@
 
 static SemaphoreHandle_t net_semaphore;
 
-static void on_connect(void *arg, esp_event_base_t event_base, int32_t event_id,
-                       void *event_data) {
-  ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+static void on_connect(void* arg,
+                       esp_event_base_t event_base,
+                       int32_t event_id,
+                       void* event_data) {
+  ip_event_got_ip_t* event = (ip_event_got_ip_t*)event_data;
   ESP_LOGI("net", "IPv4 address: " IPSTR, IP2STR(&event->ip_info.ip));
   xSemaphoreGive(net_semaphore);
 }
@@ -39,7 +41,7 @@ esp_err_t network_init(void) {
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
   esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_STA();
-  esp_netif_t *netif = esp_netif_new(&netif_config);
+  esp_netif_t* netif = esp_netif_new(&netif_config);
 
   esp_netif_attach_wifi_station(netif);
   esp_wifi_set_default_wifi_sta_handlers();
