@@ -81,6 +81,8 @@ std::optional<EdgeEvent> get_event() {
 
       event.timestamp = *timestamp_ptr;
       event.sensor = index;
+
+      vRingbufferReturnItem(ringbuf, timestamp_ptr);
       return event;
     }
 
