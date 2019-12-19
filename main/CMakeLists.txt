@@ -1,7 +1,5 @@
-set(COMPONENT_REQUIRES)
-set(COMPONENT_PRIV_REQUIRES nvs_flash coap_server edge_period_sensor)
-
-set(COMPONENT_SRCS main.cpp)
-set(COMPONENT_ADD_INCLUDEDIRS "")
-
-register_component()
+idf_component_register(
+	SRCS main.cpp network.c
+	INCLUDE_DIRS "."
+	PRIV_REQUIRES wpa_supplicant nvs_flash esp_netif coap_server edge_period_sensor
+)

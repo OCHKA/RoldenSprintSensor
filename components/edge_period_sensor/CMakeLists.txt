@@ -4,4 +4,4 @@ idf_component_register(
 	PRIV_INCLUDE_DIRS "private_include"
 	REQUIRES coap
 )
-target_compile_options(${COMPONENT_LIB} PUBLIC -std=c++17)
+target_compile_options(${COMPONENT_LIB} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>)
