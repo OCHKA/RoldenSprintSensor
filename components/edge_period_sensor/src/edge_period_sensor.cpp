@@ -6,12 +6,20 @@
 #include <freertos/ringbuf.h>
 
 #include <map>
+#include <vector>
 
 namespace edge_period_sensor {
 
+using edge_timestamp_t = uint64_t;
+
 const auto EDGE_TIMESTAMP_SAMPLES = 256;
 
-std::map<const gpio_num_t, RingbufHandle_t> sensors = {{GPIO_NUM_15, nullptr}};
+struct Sensor {
+  const gpio_num_t pin;
+  RingbufHandle_t periods;
+  edge_timestamp_t prev_edge;
+};
+std::vector<Sensor> sensors = {{GPIO_NUM_15, {}, {}}};
 
 void IRAM_ATTR gpio_isr(void* arg) {
   uint32_t gpio_intr_status = READ_PERI_REG(GPIO_STATUS_REG);
@@ -20,13 +28,14 @@ void IRAM_ATTR gpio_isr(void* arg) {
   SET_PERI_REG_MASK(GPIO_STATUS1_W1TC_REG, gpio_intr_status_h);
 
   for (auto& sensor : sensors) {
-    auto& pin = sensor.first;
-    auto& ringbuf = sensor.second;
+    if (gpio_intr_status & BIT(sensor.pin)) {
+      edge_timestamp_t edge;
+      timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &edge);
 
-    if (gpio_intr_status & BIT(pin)) {
-      edge_timestamp_t timestamp;
-      timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &timestamp);
-      xRingbufferSendFromISR(ringbuf, &timestamp, sizeof(timestamp), nullptr);
+      period_t period = edge - sensor.prev_edge;
+      sensor.prev_edge = edge;
+
+      xRingbufferSendFromISR(sensor.periods, &period, sizeof(period), nullptr);
     }
   }
 }
@@ -35,14 +44,11 @@ esp_err_t init() {
   uint64_t pin_mask = 0;
 
   for (auto& sensor : sensors) {
-    auto& pin = sensor.first;
-    auto& ringbuf = sensor.second;
+    pin_mask |= BIT(sensor.pin);
 
-    pin_mask |= BIT(pin);
-
-    auto required_size = sizeof(edge_timestamp_t) * EDGE_TIMESTAMP_SAMPLES;
-    ringbuf = xRingbufferCreate(required_size, RINGBUF_TYPE_NOSPLIT);
-    if (!ringbuf) {
+    auto required_size = sizeof(period_t) * EDGE_TIMESTAMP_SAMPLES;
+    sensor.periods = xRingbufferCreate(required_size, RINGBUF_TYPE_NOSPLIT);
+    if (!sensor.periods) {
       return ESP_FAIL;
     }
   }
@@ -66,27 +72,21 @@ esp_err_t init() {
   return ESP_OK;
 }
 
-std::optional<EdgeEvent> get_event() {
-  size_t index = 0;
-  for (auto& sensor : sensors) {
-    auto& ringbuf = sensor.second;
+std::optional<period_t> get_period(size_t sensor_index) {
+  if (sensor_index >= sensors.size()) {
+    return {};
+  }
 
-    size_t item_size;
-    auto timestamp_ptr =
-        (edge_timestamp_t*)xRingbufferReceive(ringbuf, &item_size, 0);
+  auto& sensor = sensors[sensor_index];
 
-    if (timestamp_ptr) {
-      EdgeEvent event = {};
-      assert(item_size == sizeof(event.timestamp));
+  size_t item_size;
+  auto ptr = (period_t*)xRingbufferReceive(sensor.periods, &item_size, 0);
+  assert(item_size == sizeof(period_t));
 
-      event.timestamp = *timestamp_ptr;
-      event.sensor = index;
-
-      vRingbufferReturnItem(ringbuf, timestamp_ptr);
-      return event;
-    }
-
-    index++;
+  if (ptr) {
+    auto period = *ptr;
+    vRingbufferReturnItem(sensor.periods, ptr);
+    return period;
   }
 
   return {};
