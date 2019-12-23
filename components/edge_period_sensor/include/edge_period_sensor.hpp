@@ -9,6 +9,7 @@ namespace edge_period_sensor {
 using period_t = uint32_t;
 
 esp_err_t init();
+size_t sensors_count();
 
 /**
  * Loads last measured period of sensor from internal buffer

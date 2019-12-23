@@ -72,6 +72,10 @@ esp_err_t init() {
   return ESP_OK;
 }
 
+size_t sensors_count() {
+  return sensors.size();
+}
+
 std::optional<period_t> get_period(size_t sensor_index) {
   if (sensor_index >= sensors.size()) {
     return {};
@@ -81,9 +85,10 @@ std::optional<period_t> get_period(size_t sensor_index) {
 
   size_t item_size;
   auto ptr = (period_t*)xRingbufferReceive(sensor.periods, &item_size, 0);
-  assert(item_size == sizeof(period_t));
 
   if (ptr) {
+    assert(item_size == sizeof(period_t));
+
     auto period = *ptr;
     vRingbufferReturnItem(sensor.periods, ptr);
     return period;
