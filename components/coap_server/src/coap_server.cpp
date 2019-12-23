@@ -12,29 +12,6 @@ get_req_cb_t get_req_callback = nullptr;
 
 coap_str_const_t* coap_new_make_str_const(const char* string);
 
-void send_text(coap_resource_t* resource,
-               coap_session_t* session,
-               coap_pdu_t* request,
-               coap_binary_t* token,
-               coap_pdu_t* response,
-               const char* msg) {
-  coap_add_data_blocked_response(resource, session, request, response, token,
-                                 COAP_MEDIATYPE_TEXT_PLAIN, 0, strlen(msg),
-                                 (const u_char*)msg);
-}
-
-void send_data(coap_resource_t* resource,
-               coap_session_t* session,
-               coap_pdu_t* request,
-               coap_binary_t* token,
-               coap_pdu_t* response,
-               const uint8_t* buffer,
-               size_t length) {
-  coap_add_data_blocked_response(resource, session, request, response, token,
-                                 COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, 0,
-                                 length, buffer);
-}
-
 void get_req_handler(coap_context_t* ctx,
                      coap_resource_t* resource,
                      coap_session_t* session,
@@ -44,12 +21,16 @@ void get_req_handler(coap_context_t* ctx,
                      coap_pdu_t* response) {
   auto cb_result = get_req_callback({(char*)query->s, query->length});
 
-  if (cb_result.has_value()) {
-    auto& vector = cb_result.value();
-    send_data(resource, session, request, token, response, vector.data(),
-              vector.size());
+  if (cb_result) {
+    auto word = cb_result.value();
+    coap_add_data_blocked_response(resource, session, request, response, token,
+                                   COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, 0,
+                                   4, reinterpret_cast<uint8_t*>(&word));
   } else {
-    send_text(resource, session, request, token, response, "invalid query");
+    const char* msg = "invalid query";
+    coap_add_data_blocked_response(resource, session, request, response, token,
+                                   COAP_MEDIATYPE_TEXT_PLAIN, 0, strlen(msg),
+                                   (const u_char*)msg);
   }
 }
 

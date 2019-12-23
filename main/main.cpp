@@ -10,10 +10,7 @@
 #include "network.h"
 
 namespace {
-
-const uint8_t PERIOD_START_SEQUENCE = 0xFF;
-
-std::optional<std::vector<uint8_t>> period_req_handler(std::string_view query) {
+std::optional<uint32_t> period_req_handler(std::string_view query) {
   int index;
   auto conv_result =
       std::from_chars(query.data(), query.data() + query.size(), index);
@@ -23,20 +20,19 @@ std::optional<std::vector<uint8_t>> period_req_handler(std::string_view query) {
     return {};
   }
 
-  std::vector<uint8_t> buffer;
+  // average pending periods before returning them
+  uint64_t sum = 0;
+  size_t count = 0;
   while (auto period = edge_period_sensor::get_period(index)) {
-    const auto period_size = sizeof(edge_period_sensor::period_t) * 8;
-    const auto item_size = sizeof(uint8_t) * 8;
-
-    buffer.emplace_back(PERIOD_START_SEQUENCE);
-
-    for (long shift = period_size - item_size; shift >= 0; shift -= item_size) {
-      auto& value = period.value();
-      buffer.emplace_back(static_cast<uint8_t>(value >> (unsigned)shift));
-    }
+    sum += period.value();
+    count++;
   };
 
-  return buffer;
+  if (count) {
+    return sum / count;
+  } else {
+    return {};
+  }
 }
 }  // namespace
 

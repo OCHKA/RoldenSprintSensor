@@ -11,7 +11,7 @@ namespace edge_period_sensor {
 
 using edge_timestamp_t = uint64_t;
 
-const auto EDGE_TIMESTAMP_SAMPLES = 1024 * 16;
+const auto EDGE_TIMESTAMP_SAMPLES = 1024 * 4;
 const auto TIMER_DIVIDER = 2;
 const auto TIMER_SCALE = TIMER_BASE_CLK / TIMER_DIVIDER;
 
