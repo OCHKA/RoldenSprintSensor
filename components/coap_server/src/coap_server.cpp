@@ -101,7 +101,7 @@ void server_task(void* p) {
 }
 
 esp_err_t init() {
-  xTaskCreate(server_task, TAG, 8 * 1024, nullptr, 5, nullptr);
+  xTaskCreatePinnedToCore(server_task, TAG, 8 * 1024, nullptr, 5, nullptr, 1);
   return ESP_OK;
 }
 
