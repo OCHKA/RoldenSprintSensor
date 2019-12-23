@@ -3,12 +3,14 @@
 #include <coap/coap.h>
 #include <esp_log.h>
 
+#include <charconv>
+
+#include "edge_period_sensor.hpp"
+
 namespace coap_server {
 
 const char* TAG = "coap_srv";
 const char* RESOURCE_NAME = "period";
-
-get_req_cb_t get_req_callback = nullptr;
 
 coap_str_const_t* coap_new_make_str_const(const char* string);
 
@@ -19,19 +21,25 @@ void get_req_handler(coap_context_t* ctx,
                      coap_binary_t* token,
                      coap_string_t* query,
                      coap_pdu_t* response) {
-  auto cb_result = get_req_callback({(char*)query->s, query->length});
+  int index;
+  auto c_query = (const char*)query->s;
+  auto conv_result = std::from_chars(c_query, c_query + query->length, index);
 
-  if (cb_result) {
-    auto word = cb_result.value();
-    coap_add_data_blocked_response(resource, session, request, response, token,
-                                   COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, 0,
-                                   4, reinterpret_cast<uint8_t*>(&word));
-  } else {
+  auto max_index = edge_period_sensor::sensors_count() - 1;
+  if (conv_result.ec != std::errc() || index > max_index || index < 0) {
     const char* msg = "invalid query";
     coap_add_data_blocked_response(resource, session, request, response, token,
                                    COAP_MEDIATYPE_TEXT_PLAIN, 0, strlen(msg),
                                    (const u_char*)msg);
   }
+
+  auto period = edge_period_sensor::get_avg_period(index);
+  assert(period);
+
+  coap_add_data_blocked_response(resource, session, request, response, token,
+                                 COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, 0,
+                                 sizeof(edge_period_sensor::period_t),
+                                 reinterpret_cast<uint8_t*>(&period));
 }
 
 void server_task(void* p) {
@@ -84,10 +92,6 @@ void server_task(void* p) {
 esp_err_t init() {
   xTaskCreatePinnedToCore(server_task, TAG, 8 * 1024, nullptr, 5, nullptr, 1);
   return ESP_OK;
-}
-
-void get_req_cb_register(get_req_cb_t cb) {
-  get_req_callback = cb;
 }
 
 // TODO: remove on update of libcoap component

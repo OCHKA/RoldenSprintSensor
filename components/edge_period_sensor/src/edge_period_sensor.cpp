@@ -2,25 +2,34 @@
 
 #include <driver/gpio.h>
 #include <driver/timer.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/ringbuf.h>
 
+#include <mutex>
 #include <vector>
 
 namespace edge_period_sensor {
 
 using edge_timestamp_t = uint64_t;
 
-const auto EDGE_TIMESTAMP_SAMPLES = 1024 * 4;
 const auto TIMER_DIVIDER = 2;
 const auto TIMER_SCALE = TIMER_BASE_CLK / TIMER_DIVIDER;
 
 struct Sensor {
+  Sensor(gpio_num_t pin) : pin(pin) {}
+
   const gpio_num_t pin;
-  RingbufHandle_t periods;
   edge_timestamp_t prev_edge;
+
+  struct Average {
+    Average() = default;
+    Average(const Average& other) : sum(other.sum), count(other.count) {}
+
+    uint64_t sum = 0;
+    size_t count = 0;
+    std::mutex mutex;
+  } avg_period;
 };
-std::vector<Sensor> sensors = {{GPIO_NUM_15, {}, {}}};
+
+std::vector<Sensor> sensors = {GPIO_NUM_15};
 
 void IRAM_ATTR gpio_isr(void* arg) {
   uint32_t gpio_intr_status = READ_PERI_REG(GPIO_STATUS_REG);
@@ -36,7 +45,12 @@ void IRAM_ATTR gpio_isr(void* arg) {
       period_t period = edge - sensor.prev_edge;
       sensor.prev_edge = edge;
 
-      xRingbufferSendFromISR(sensor.periods, &period, sizeof(period), nullptr);
+      auto& average = sensor.avg_period;
+      if (average.mutex.try_lock()) {
+        average.sum += period;
+        average.count++;
+        average.mutex.unlock();
+      }
     }
   }
 }
@@ -46,12 +60,6 @@ esp_err_t init() {
 
   for (auto& sensor : sensors) {
     pin_mask |= BIT(sensor.pin);
-
-    auto required_size = sizeof(period_t) * EDGE_TIMESTAMP_SAMPLES;
-    sensor.periods = xRingbufferCreate(required_size, RINGBUF_TYPE_NOSPLIT);
-    if (!sensor.periods) {
-      return ESP_FAIL;
-    }
   }
 
   gpio_config_t io_cfg;
@@ -77,28 +85,24 @@ size_t sensors_count() {
   return sensors.size();
 }
 
-std::optional<period_t> get_period(size_t sensor_index) {
+std::optional<period_t> get_avg_period(size_t sensor_index) {
   if (sensor_index >= sensors.size()) {
     return {};
   }
+  auto& average = sensors[sensor_index].avg_period;
 
-  auto& sensor = sensors[sensor_index];
+  average.mutex.lock();
 
-  size_t item_size;
-  auto ptr = (period_t*)xRingbufferReceive(sensor.periods, &item_size, 0);
-
-  if (ptr) {
-    assert(item_size == sizeof(period_t));
-
-    auto ticks = *ptr;
-    // convert ticks to microseconds
-    auto period = ticks / (TIMER_SCALE / 1e6);
-
-    vRingbufferReturnItem(sensor.periods, ptr);
-    return period;
+  period_t avg_ticks = 0;
+  if (average.count) {
+    avg_ticks = average.sum / average.count;
+    average.sum = 0;
+    average.count = 0;
   }
 
-  return {};
+  average.mutex.unlock();
+
+  return avg_ticks / (TIMER_SCALE / 1e6);  // converted to microseconds
 }
 
 }  // namespace edge_period_sensor
