@@ -5,7 +5,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/ringbuf.h>
 
-#include <map>
 #include <vector>
 
 namespace edge_period_sensor {
@@ -13,6 +12,8 @@ namespace edge_period_sensor {
 using edge_timestamp_t = uint64_t;
 
 const auto EDGE_TIMESTAMP_SAMPLES = 256;
+const auto TIMER_DIVIDER = 2;
+const auto TIMER_SCALE = TIMER_BASE_CLK / TIMER_DIVIDER;
 
 struct Sensor {
   const gpio_num_t pin;
@@ -62,7 +63,7 @@ esp_err_t init() {
   gpio_isr_register(gpio_isr, nullptr, ESP_INTR_FLAG_IRAM, nullptr);
 
   timer_config_t tim_cfg;
-  tim_cfg.divider = 2;
+  tim_cfg.divider = TIMER_DIVIDER;
   tim_cfg.counter_dir = TIMER_COUNT_UP;
   tim_cfg.counter_en = TIMER_START;
   tim_cfg.alarm_en = TIMER_ALARM_DIS;
@@ -89,7 +90,10 @@ std::optional<period_t> get_period(size_t sensor_index) {
   if (ptr) {
     assert(item_size == sizeof(period_t));
 
-    auto period = *ptr;
+    auto ticks = *ptr;
+    // convert ticks to microseconds
+    auto period = ticks / (TIMER_SCALE / 1e6);
+
     vRingbufferReturnItem(sensor.periods, ptr);
     return period;
   }

@@ -32,7 +32,7 @@ std::optional<std::vector<uint8_t>> period_req_handler(std::string_view query) {
 
     for (long shift = period_size - item_size; shift >= 0; shift -= item_size) {
       auto& value = period.value();
-      buffer.emplace_back(static_cast<uint8_t>(value >> shift));
+      buffer.emplace_back(static_cast<uint8_t>(value >> (unsigned)shift));
     }
   };
 
@@ -52,14 +52,12 @@ void app_main(void) {
   ESP_ERROR_CHECK(edge_period_sensor::init());
 
   while (true) {
-    //    auto period = edge_period_sensor::get_period(0);
-    //    if (period) {
-    //      printf("%u\n", period.value());
-    //    } else {
-    //      printf(".");
-    //    }
-    //    fflush(stdout);
-    usleep(1000 * 1000);
+    for (auto col = 0; col < 80; col++) {
+      printf(".");
+      fflush(stdout);
+      usleep(1000 * 1000);
+    }
+    printf("\n");
   }
 }
 }
