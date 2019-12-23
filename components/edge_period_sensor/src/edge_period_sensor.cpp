@@ -2,8 +2,9 @@
 
 #include <driver/gpio.h>
 #include <driver/timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
-#include <mutex>
 #include <vector>
 
 namespace edge_period_sensor {
@@ -20,12 +21,9 @@ struct Sensor {
   edge_timestamp_t prev_edge;
 
   struct Average {
-    Average() = default;
-    Average(const Average& other) : sum(other.sum), count(other.count) {}
-
     uint64_t sum = 0;
     size_t count = 0;
-    std::mutex mutex;
+    SemaphoreHandle_t semaphore;
   } avg_period;
 };
 
@@ -45,11 +43,15 @@ void IRAM_ATTR gpio_isr(void* arg) {
       period_t period = edge - sensor.prev_edge;
       sensor.prev_edge = edge;
 
+      // Assumes that reader is locking on semaphore
+      // After writing here we have a little bit of time before next ISR to
+      // calculate average value
       auto& average = sensor.avg_period;
-      if (average.mutex.try_lock()) {
-        average.sum += period;
-        average.count++;
-        average.mutex.unlock();
+      average.sum += period;
+      average.count++;
+
+      if (uxSemaphoreGetCount(average.semaphore) == 0) {
+        xSemaphoreGiveFromISR(average.semaphore, nullptr);
       }
     }
   }
@@ -60,6 +62,7 @@ esp_err_t init() {
 
   for (auto& sensor : sensors) {
     pin_mask |= BIT(sensor.pin);
+    sensor.avg_period.semaphore = xSemaphoreCreateBinary();
   }
 
   gpio_config_t io_cfg;
@@ -85,24 +88,27 @@ size_t sensors_count() {
   return sensors.size();
 }
 
-std::optional<period_t> get_avg_period(size_t sensor_index) {
+std::optional<period_t> get_avg_period(size_t sensor_index, time_t timeout_ms) {
   if (sensor_index >= sensors.size()) {
     return {};
   }
+
   auto& average = sensors[sensor_index].avg_period;
+  if (xSemaphoreTake(average.semaphore, pdMS_TO_TICKS(timeout_ms))) {
+    // Hope for the god of timings that this will go before next ISR
 
-  average.mutex.lock();
+    if (!average.count) { // in case of ISR from ringing it may die here
+      return {};
+    }
 
-  period_t avg_ticks = 0;
-  if (average.count) {
-    avg_ticks = average.sum / average.count;
+    period_t avg_ticks = average.sum / average.count;
     average.sum = 0;
     average.count = 0;
+
+    return avg_ticks / (TIMER_SCALE / 1e6);  // convert to microseconds
+  } else {
+    return {};
   }
-
-  average.mutex.unlock();
-
-  return avg_ticks / (TIMER_SCALE / 1e6);  // converted to microseconds
 }
 
 }  // namespace edge_period_sensor

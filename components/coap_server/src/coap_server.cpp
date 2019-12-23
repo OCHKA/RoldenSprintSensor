@@ -21,26 +21,39 @@ void get_req_handler(coap_context_t* ctx,
                      coap_binary_t* token,
                      coap_string_t* query,
                      coap_pdu_t* response) {
+  auto send_response = [&](const uint8_t* buffer, size_t size,
+                           uint16_t mediatype) {
+    coap_add_data_blocked_response(resource, session, request, response, token,
+                                   mediatype, 0, size, buffer);
+  };
+
+  auto send_data = [&](const uint8_t* buffer, size_t size) {
+    send_response(buffer, size, COAP_MEDIATYPE_APPLICATION_OCTET_STREAM);
+  };
+  auto send_text = [&](const char* msg) {
+    send_response(reinterpret_cast<const uint8_t*>(msg), strlen(msg),
+                  COAP_MEDIATYPE_APPLICATION_OCTET_STREAM);
+  };
+
   int index;
   auto c_query = (const char*)query->s;
   auto conv_result = std::from_chars(c_query, c_query + query->length, index);
 
   auto max_index = edge_period_sensor::sensors_count() - 1;
   if (conv_result.ec != std::errc() || index > max_index || index < 0) {
-    const char* msg = "invalid query";
-    coap_add_data_blocked_response(resource, session, request, response, token,
-                                   COAP_MEDIATYPE_TEXT_PLAIN, 0, strlen(msg),
-                                   (const u_char*)msg);
+    send_text("invalid query");
   }
 
-  auto period = edge_period_sensor::get_avg_period(index);
-  assert(period);
+  auto period = edge_period_sensor::get_avg_period(
+      index, (COAP_DEFAULT_SESSION_TIMEOUT - 5) * 1000);
 
-  coap_add_data_blocked_response(resource, session, request, response, token,
-                                 COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, 0,
-                                 sizeof(edge_period_sensor::period_t),
-                                 reinterpret_cast<uint8_t*>(&period));
-}
+  if (period) {
+    send_data(reinterpret_cast<uint8_t*>(&period.value()),
+              sizeof(edge_period_sensor::period_t));
+  } else {
+    send_data(nullptr, 0);
+  }
+};
 
 void server_task(void* p) {
   coap_address_t serv_addr;
