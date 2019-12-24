@@ -4,14 +4,19 @@
 
 static SemaphoreHandle_t semaphore;
 
-static void on_connect(void* arg,
-                       esp_event_base_t event_base,
-                       int32_t event_id,
-                       void* event_data) {
-  xSemaphoreGive(semaphore);
+static void event_handler(void* arg,
+                          esp_event_base_t event_base,
+                          int32_t event_id,
+                          void* event_data) {
+  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+    esp_wifi_connect();
+  }
+  if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+    xSemaphoreGive(semaphore);
+  }
 }
 
-void wifi_connect() {
+static void wifi_connect() {
   ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
   wifi_config_t wifi_config = {
       .sta = {.ssid = "***REMOVED***", .password = "***REMOVED***"}};
@@ -37,8 +42,10 @@ esp_err_t network_init() {
   esp_netif_attach_wifi_station(netif);
   esp_wifi_set_default_wifi_sta_handlers();
 
+  ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                             &event_handler, NULL));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                             &on_connect, NULL));
+                                             &event_handler, NULL));
 
   wifi_connect();
 
