@@ -11,14 +11,20 @@ namespace edge_period_sensor {
 
 using edge_timestamp_t = uint64_t;
 
-const auto TIMER_DIVIDER = 2;
+const auto MAX_EDGE_FREQ = 100e3;
+const auto TIMER_FREQ = MAX_EDGE_FREQ * 2; // Nyquist frequency
+const auto TIMER_DIVIDER = TIMER_BASE_CLK / TIMER_FREQ;
 const auto TIMER_SCALE = TIMER_BASE_CLK / TIMER_DIVIDER;
+
+// edge periods cannot suddenly change n times
+const auto PERIOD_DEBOUNCE_SCALE = 5;
 
 struct Sensor {
   Sensor(gpio_num_t pin) : pin(pin) {}
 
   const gpio_num_t pin;
   edge_timestamp_t prev_edge;
+  period_t prev_period;
 
   struct Average {
     uint64_t sum = 0;
@@ -35,13 +41,20 @@ void IRAM_ATTR gpio_isr(void* arg) {
   SET_PERI_REG_MASK(GPIO_STATUS_W1TC_REG, gpio_intr_status);
   SET_PERI_REG_MASK(GPIO_STATUS1_W1TC_REG, gpio_intr_status_h);
 
+  edge_timestamp_t edge;
+  timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &edge);
+
   for (auto& sensor : sensors) {
     if (gpio_intr_status & BIT(sensor.pin)) {
-      edge_timestamp_t edge;
-      timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &edge);
-
       period_t period = edge - sensor.prev_edge;
       sensor.prev_edge = edge;
+
+      // Debounce, relying on system inertia
+      auto prev_period = sensor.prev_period;
+      sensor.prev_period = period;
+      if (period * PERIOD_DEBOUNCE_SCALE < prev_period) {
+        continue;
+      }
 
       // Assumes that reader is locking on semaphore
       // After writing here we have a little bit of time before next ISR to
@@ -69,9 +82,8 @@ esp_err_t init() {
   io_cfg.intr_type = GPIO_INTR_POSEDGE;
   io_cfg.mode = GPIO_MODE_INPUT;
   io_cfg.pin_bit_mask = pin_mask;
-  io_cfg.pull_down_en = GPIO_PULLDOWN_ENABLE;
   gpio_config(&io_cfg);
-  gpio_isr_register(gpio_isr, nullptr, ESP_INTR_FLAG_IRAM, nullptr);
+  gpio_isr_register(gpio_isr, nullptr, ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_EDGE, nullptr);
 
   timer_config_t tim_cfg;
   tim_cfg.divider = TIMER_DIVIDER;
@@ -97,7 +109,7 @@ std::optional<period_t> get_avg_period(size_t sensor_index, time_t timeout_ms) {
   if (xSemaphoreTake(average.semaphore, pdMS_TO_TICKS(timeout_ms))) {
     // Hope for the god of timings that this will go before next ISR
 
-    if (!average.count) { // in case of ISR from ringing it may die here
+    if (!average.count) {  // in case of ISR from ringing it may die here
       return {};
     }
 
