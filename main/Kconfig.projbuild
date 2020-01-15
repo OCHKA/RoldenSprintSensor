@@ -1,0 +1,15 @@
+menu "RoldenSprint Network"
+    config WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+
+    config WIFI_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+
+    config MAX_STA_CONN
+        int "Maximal STA connections"
+        default 1
+        help
+            Max number of the STA connects to AP.
+endmenu
