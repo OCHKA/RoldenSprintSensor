@@ -7,6 +7,7 @@
 #include "coap_server.hpp"
 #include "edge_period_sensor.hpp"
 #include "network.h"
+#include "selftest_gen.hpp"
 
 //#define DEBUG_PRINT_PERIODS
 
@@ -19,6 +20,7 @@ void app_main(void) {
   ESP_ERROR_CHECK(coap_server::init());
 
   ESP_ERROR_CHECK(edge_period_sensor::init());
+  ESP_ERROR_CHECK(selftest_gen::init());
 
   auto col = 0;
   while (true) {
