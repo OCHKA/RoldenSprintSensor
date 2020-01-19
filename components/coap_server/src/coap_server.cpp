@@ -44,15 +44,14 @@ void get_req_handler(coap_context_t* ctx,
     send_text("invalid query");
   }
 
-  auto period = edge_period_sensor::get_avg_period(
-      index, (COAP_DEFAULT_SESSION_TIMEOUT - 5) * 1000);
+  auto sensor_response = edge_period_sensor::get_avg_period(index);
 
-  if (period) {
-    send_data(reinterpret_cast<uint8_t*>(&period.value()),
-              sizeof(edge_period_sensor::period_t));
-  } else {
-    send_data(nullptr, 0);
+  edge_period_sensor::period_t period = 0;
+  if (sensor_response) {
+    period = sensor_response.value();
   }
+
+  send_data(reinterpret_cast<uint8_t*>(&period), sizeof(period));
 };
 
 void server_task(void* p) {
@@ -88,6 +87,7 @@ void server_task(void* p) {
 
   while (true) {
     int result = coap_run_once(ctx, wait_ms);
+
     if (result < 0) {
       ESP_LOGE(TAG, "coap run_once() failed");
       break;
