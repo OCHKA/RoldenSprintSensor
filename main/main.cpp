@@ -19,6 +19,11 @@ void app_main(void) {
   ESP_ERROR_CHECK(selftest_gen::init());
 
   while (true) {
+//    auto period = edge_period_sensor::get_avg_period(0);
+//    if (period) {
+//      printf("%u\n", period.value());
+//    }
+
     usleep(1000 * 1000);
   }
 }
