@@ -11,10 +11,10 @@ namespace edge_period_sensor {
 
 using edge_timestamp_t = uint64_t;
 
-const auto MAX_EDGE_FREQ = 100e3;
-const auto TIMER_FREQ = MAX_EDGE_FREQ * 2; // Nyquist frequency
+const auto MAX_EDGE_FREQ = 1000e3;
+const auto TIMER_FREQ = MAX_EDGE_FREQ * 2;  // Nyquist frequency
 const auto TIMER_DIVIDER = TIMER_BASE_CLK / TIMER_FREQ;
-const auto TIMER_SCALE = TIMER_BASE_CLK / TIMER_DIVIDER;
+const auto TIMER_SCALE = TIMER_BASE_CLK / TIMER_DIVIDER / 10;
 
 struct Sensor {
   Sensor(gpio_num_t pin) : pin(pin) {}
@@ -51,7 +51,7 @@ void IRAM_ATTR gpio_isr(void* arg) {
       sensor.prev_negative_edge = sensor.prev_edge;
       sensor.prev_edge = edge;
 
-      auto &history = sensor.history;
+      auto& history = sensor.history;
       if (history.position + 1 >= history.size) {
         history.position = 0;
       }
@@ -78,6 +78,7 @@ esp_err_t init() {
                                          // trigger on specific edge
   io_cfg.mode = GPIO_MODE_INPUT;
   io_cfg.pin_bit_mask = pin_mask;
+  io_cfg.pull_up_en = GPIO_PULLUP_ENABLE;
   gpio_config(&io_cfg);
   gpio_isr_register(gpio_isr, nullptr, ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_EDGE,
                     nullptr);
@@ -106,7 +107,7 @@ std::optional<period_t> get_avg_period(size_t sensor_index) {
   if (xSemaphoreTake(sensor.semaphore, 0)) {
     // Hope for the god of timings that this will go before next ISR
 
-    auto &history = sensor.history;
+    auto& history = sensor.history;
     uint64_t avg_sum = 0;
     size_t avg_count = 0;
 
