@@ -5,12 +5,12 @@
 
 #include <charconv>
 
-#include "edge_period_sensor.hpp"
+#include "sensor.hpp"
 
 namespace coap_server {
 
 const char* TAG = "coap_srv";
-const char* RESOURCE_NAME = "period";
+const char* RESOURCE_NAME = "rotations";
 
 coap_str_const_t* coap_new_make_str_const(const char* string);
 
@@ -39,19 +39,13 @@ void get_req_handler(coap_context_t* ctx,
   auto c_query = (const char*)query->s;
   auto conv_result = std::from_chars(c_query, c_query + query->length, index);
 
-  auto max_index = edge_period_sensor::sensors_count() - 1;
+  auto max_index = sensor::sensors_count() - 1;
   if (conv_result.ec != std::errc() || index > max_index || index < 0) {
     send_text("invalid query");
   }
 
-  auto sensor_response = edge_period_sensor::get_avg_period(index);
-
-  edge_period_sensor::period_t period = 0;
-  if (sensor_response) {
-    period = sensor_response.value();
-  }
-
-  send_data(reinterpret_cast<uint8_t*>(&period), sizeof(period));
+  auto rotations = sensor::rotations_count(index);
+  send_data(reinterpret_cast<uint8_t*>(&rotations), sizeof(rotations));
 };
 
 void server_task(void* p) {

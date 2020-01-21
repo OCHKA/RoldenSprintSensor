@@ -1,7 +1,6 @@
 idf_component_register(
-	SRCS "src/coap_server.cpp"
+	SRCS "src/sensor.cpp"
 	INCLUDE_DIRS "include"
-	REQUIRES coap sensor
 )
 
 target_compile_options(${COMPONENT_LIB} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>)

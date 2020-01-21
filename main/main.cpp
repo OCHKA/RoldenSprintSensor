@@ -3,9 +3,10 @@
 #include <sys/unistd.h>
 
 #include "coap_server.hpp"
-#include "edge_period_sensor.hpp"
+#include "sensor.hpp"
 #include "network.h"
-#include "selftest_gen.hpp"
+
+#define DEBUG_PRINT 0
 
 extern "C" {
 void app_main(void) {
@@ -15,14 +16,13 @@ void app_main(void) {
   ESP_ERROR_CHECK(network_init());
   ESP_ERROR_CHECK(coap_server::init());
 
-  ESP_ERROR_CHECK(edge_period_sensor::init());
-  ESP_ERROR_CHECK(selftest_gen::init());
+  ESP_ERROR_CHECK(sensor::init());
 
+//  size_t prev_rotations = 0;
   while (true) {
-//    auto period = edge_period_sensor::get_avg_period(0);
-//    if (period) {
-//      printf("%u\n", period.value());
-//    }
+//    auto rotations = sensor::rotations_count(0);
+//    printf("%u\n", rotations - prev_rotations);
+//    prev_rotations = rotations;
 
     usleep(1000 * 1000);
   }
