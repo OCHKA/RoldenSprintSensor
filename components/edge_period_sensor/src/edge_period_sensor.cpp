@@ -73,6 +73,14 @@ esp_err_t init() {
     sensor.semaphore = xSemaphoreCreateBinary();
   }
 
+  timer_config_t tim_cfg;
+  tim_cfg.divider = TIMER_DIVIDER;
+  tim_cfg.counter_dir = TIMER_COUNT_UP;
+  tim_cfg.counter_en = TIMER_START;
+  tim_cfg.alarm_en = TIMER_ALARM_DIS;
+  tim_cfg.auto_reload = TIMER_AUTORELOAD_EN;
+  timer_init(TIMER_GROUP_0, TIMER_0, &tim_cfg);
+
   gpio_config_t io_cfg;
   io_cfg.intr_type = GPIO_INTR_ANYEDGE;  // ESP32 seems to not be able to
                                          // trigger on specific edge
@@ -82,14 +90,6 @@ esp_err_t init() {
   gpio_config(&io_cfg);
   gpio_isr_register(gpio_isr, nullptr, ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_EDGE,
                     nullptr);
-
-  timer_config_t tim_cfg;
-  tim_cfg.divider = TIMER_DIVIDER;
-  tim_cfg.counter_dir = TIMER_COUNT_UP;
-  tim_cfg.counter_en = TIMER_START;
-  tim_cfg.alarm_en = TIMER_ALARM_DIS;
-  tim_cfg.auto_reload = TIMER_AUTORELOAD_EN;
-  timer_init(TIMER_GROUP_0, TIMER_0, &tim_cfg);
 
   return ESP_OK;
 }
