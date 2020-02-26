@@ -1,15 +1,19 @@
 menu "RoldenSprint Network"
     config WIFI_SSID
         string "WiFi SSID"
-        default "myssid"
+        default "roldensprint"
 
     config WIFI_PASSWORD
         string "WiFi Password"
-        default "mypassword"
+        default "sect"
 
     config MAX_STA_CONN
         int "Maximal STA connections"
         default 1
         help
             Max number of the STA connects to AP.
+
+    config MQTT_BROKER_URI
+            string "MQTT Broker Uri"
+            default "mqtt://"
 endmenu
