@@ -1,11 +1,17 @@
 #include "sensor.hpp"
 
 #include <driver/gpio.h>
+#include <driver/timer.h>
 
+#include <array>
 #include <atomic>
-#include <vector>
 
 namespace sensor {
+
+const auto MAX_EDGE_FREQ = 1000e3;
+const auto TIMER_FREQ = MAX_EDGE_FREQ * 2;  // Nyquist frequency
+const auto TIMER_DIVIDER = TIMER_BASE_CLK / TIMER_FREQ;
+const auto TIMER_SCALE = TIMER_BASE_CLK / TIMER_DIVIDER;
 
 struct Sensor {
   Sensor(gpio_num_t pin) : pin(pin), edges_count(0) {}
@@ -13,10 +19,11 @@ struct Sensor {
       : pin(sensor.pin), edges_count(static_cast<size_t>(sensor.edges_count)) {}
 
   const gpio_num_t pin;
-  std::atomic_size_t edges_count;
+  volatile std::atomic_size_t edges_count;
+  uint64_t last_edge_timestamp;
 };
 
-std::vector<Sensor> sensors = {GPIO_NUM_12, GPIO_NUM_14};
+std::array<Sensor, 2> sensors = {GPIO_NUM_12, GPIO_NUM_14};
 
 void IRAM_ATTR gpio_isr(void* arg) {
   uint32_t gpio_intr_status = READ_PERI_REG(GPIO_STATUS_REG);
@@ -27,6 +34,9 @@ void IRAM_ATTR gpio_isr(void* arg) {
   for (auto& sensor : sensors) {
     if (gpio_intr_status & BIT(sensor.pin)) {
       sensor.edges_count++;
+
+      timer_get_counter_value(TIMER_GROUP_0, TIMER_0,
+                              &sensor.last_edge_timestamp);
     }
   }
 }
@@ -37,6 +47,14 @@ esp_err_t init() {
   for (auto& sensor : sensors) {
     pin_mask |= BIT(sensor.pin);
   }
+
+  timer_config_t tim_cfg;
+  tim_cfg.divider = TIMER_DIVIDER;
+  tim_cfg.counter_dir = TIMER_COUNT_UP;
+  tim_cfg.counter_en = TIMER_START;
+  tim_cfg.alarm_en = TIMER_ALARM_DIS;
+  tim_cfg.auto_reload = TIMER_AUTORELOAD_EN;
+  timer_init(TIMER_GROUP_0, TIMER_0, &tim_cfg);
 
   gpio_config_t io_cfg;
   io_cfg.intr_type = GPIO_INTR_ANYEDGE;  // ESP32 seems to not be able to
@@ -55,11 +73,19 @@ size_t sensors_count() {
   return sensors.size();
 }
 
-size_t rotations_count(size_t sensor_index) {
-  assert(sensor_index < sensors_count() && "Invalid sensor index");
-
-  auto& edges = sensors.at(sensor_index).edges_count;
-  return edges / 2;  // On each rotation we have rising and falling edge
+uint64_t ticks_to_usec(uint64_t ticks) {
+  return ticks / (TIMER_SCALE / 1e6);
 }
 
+Sample last_sample(size_t sensor_index) {
+  assert(sensor_index < sensors.size() && "Invalid sensor index");
+
+  auto& sensor = sensors.at(sensor_index);
+
+  uint64_t timestamp;
+  auto rotations = sensor.edges_count / 2;
+  timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &timestamp);
+
+  return {rotations, ticks_to_usec(sensor.last_edge_timestamp)};
+}
 }  // namespace sensor

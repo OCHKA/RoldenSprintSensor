@@ -3,11 +3,15 @@
 #include <nvs_flash.h>
 #include <sys/unistd.h>
 
+#include <atomic>
+#include <sensor.hpp>
 #include <string>
 #include <vector>
 
 #include "network.h"
 #include "sensor.hpp"
+
+std::atomic_bool is_mqtt_connected = false;
 
 static void mqtt_event_handler(void* handler_args,
                                esp_event_base_t base,
@@ -18,14 +22,33 @@ static void mqtt_event_handler(void* handler_args,
 
   switch (event->event_id) {
     case MQTT_EVENT_CONNECTED:
+      is_mqtt_connected = true;
       //      esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
       break;
+    case MQTT_EVENT_DISCONNECTED:
+      is_mqtt_connected = false;
     case MQTT_EVENT_DATA:
       //      printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
       //      printf("DATA=%.*s\r\n", event->data_len, event->data);
       break;
     default:
       break;
+  }
+}
+
+void send_sensor_samples(esp_mqtt_client_handle_t mqttc) {
+  static const auto topics = {"racer0/rotations", "racer1/rotations"};
+
+  size_t index = 0;
+  for (auto& topic : topics) {
+    auto sample = sensor::last_sample(index);
+
+    char buffer[128];
+    auto msg_len = snprintf(buffer, sizeof(buffer), "[%u,%llu]",
+                            sample.rotations, sample.edge_timestamp);
+
+    esp_mqtt_client_publish(mqttc, topic, buffer, msg_len, 0, 0);
+    index++;
   }
 }
 
@@ -43,25 +66,19 @@ void app_main(void) {
   mqtt_cfg.username = "roldensprint";
   mqtt_cfg.password = "roldensprint";
 
-  esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+  esp_mqtt_client_handle_t mqttc = esp_mqtt_client_init(&mqtt_cfg);
   esp_mqtt_client_register_event(
-      client, static_cast<esp_mqtt_event_id_t>(ESP_EVENT_ANY_ID),
-      mqtt_event_handler, client);
-  esp_mqtt_client_start(client);
+      mqttc, static_cast<esp_mqtt_event_id_t>(ESP_EVENT_ANY_ID),
+      mqtt_event_handler, mqttc);
+  esp_mqtt_client_start(mqttc);
 
   while (true) {
-    std::vector<std::string> topics = {"racer0/rotations", "racer1/rotations"};
-    size_t index = 0;
-    for (auto& topic : topics) {
-      size_t rotations = sensor::rotations_count(index);
-      char buffer[64];
-      auto msg_len = snprintf(buffer, sizeof(buffer), "%u", rotations);
-
-      esp_mqtt_client_publish(client, topic.c_str(), buffer, msg_len, 0, 0);
-      index++;
+    if (is_mqtt_connected) {
+      send_sensor_samples(mqttc);
+      usleep(1000 * 100);
+    } else {
+      usleep(1000 * 1000);
     }
-
-    usleep(1000 * 100);
   }
 }
 }
