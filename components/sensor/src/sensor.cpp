@@ -23,7 +23,7 @@ struct Sensor {
   uint64_t last_edge_timestamp;
 };
 
-std::array<Sensor, 2> sensors = {GPIO_NUM_12, GPIO_NUM_14};
+std::array<Sensor, 2> sensors = {GPIO_NUM_27, GPIO_NUM_26};
 
 void IRAM_ATTR gpio_isr(void* arg) {
   uint32_t gpio_intr_status = READ_PERI_REG(GPIO_STATUS_REG);
