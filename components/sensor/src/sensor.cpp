@@ -16,7 +16,7 @@ struct Sensor {
   std::atomic_size_t edges_count;
 };
 
-std::vector<Sensor> sensors = {GPIO_NUM_15};
+std::vector<Sensor> sensors = {GPIO_NUM_12, GPIO_NUM_14};
 
 void IRAM_ATTR gpio_isr(void* arg) {
   uint32_t gpio_intr_status = READ_PERI_REG(GPIO_STATUS_REG);

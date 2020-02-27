@@ -9,8 +9,6 @@
 #include "network.h"
 #include "sensor.hpp"
 
-#define DEBUG_PRINT 0
-
 static void mqtt_event_handler(void* handler_args,
                                esp_event_base_t base,
                                int32_t event_id,
@@ -51,20 +49,15 @@ void app_main(void) {
       mqtt_event_handler, client);
   esp_mqtt_client_start(client);
 
-  //  size_t prev_rotations = 0;
   while (true) {
-    //    auto rotations = sensor::rotations_count(0);
-    //    printf("%u\n", rotations - prev_rotations);
-    //    prev_rotations = rotations;
-
-    std::vector<std::string> topics = {"racer0/rotations",
-                                       "racer1/rotations"};
-
+    std::vector<std::string> topics = {"racer0/rotations", "racer1/rotations"};
     size_t index = 0;
     for (auto& topic : topics) {
-      auto rotations = std::to_string(sensor::rotations_count(index));
-      esp_mqtt_client_publish(client, topic.c_str(), rotations.c_str(),
-                              rotations.size(), 0, 0);
+      size_t rotations = sensor::rotations_count(index);
+      char buffer[64];
+      auto msg_len = snprintf(buffer, sizeof(buffer), "%u", rotations);
+
+      esp_mqtt_client_publish(client, topic.c_str(), buffer, msg_len, 0, 0);
       index++;
     }
 
