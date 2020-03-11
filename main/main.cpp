@@ -37,18 +37,18 @@ static void mqtt_event_handler(void* handler_args,
 }
 
 void send_sensor_samples(esp_mqtt_client_handle_t mqttc) {
-  static const auto topics = {"racer0/rotations", "racer1/rotations"};
-
-  size_t index = 0;
-  for (auto& topic : topics) {
-    auto sample = sensor::last_sample(index);
+  for (size_t index = 0; index < sensor::sensors_count(); index++) {
+    char topic[64];
+    snprintf(topic, sizeof(topic), "sensor/%u/sample", index);
 
     char buffer[128];
-    auto msg_len = snprintf(buffer, sizeof(buffer), "[%u,%llu]",
-                            sample.rotations, sample.edge_timestamp);
+    auto sample = sensor::last_sample(index);
+
+    auto msg_len =
+        snprintf(buffer, sizeof(buffer), R"({"rotations":%u,"timestamp":%llu})",
+                 sample.rotations, sample.edge_timestamp);
 
     esp_mqtt_client_publish(mqttc, topic, buffer, msg_len, 0, 0);
-    index++;
   }
 }
 
